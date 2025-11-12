@@ -1,0 +1,33 @@
+name: simulator
+on:
+  workflow_dispatch:
+    inputs:
+      cycles:
+        description: "Number of publications (approx; 1 per PERIOD)"
+        required: false
+        default: "3"
+jobs:
+  run-sim:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install paho-mqtt python-dotenv
+      - name: Run simulator (limited)
+        env:
+          UBIDOTS_HOST: industrial.api.ubidots.com
+          UBIDOTS_PORT: 8883
+          UBIDOTS_TOKEN: ${{ secrets.UBIDOTS_TOKEN }}
+          UBIDOTS_DEVICE: aquarium_iteration_01
+          PUB_PERIOD_SEC: 10
+        run: |
+          python simulators/mqtt/simulate.py &
+          PID=$!
+          # Espera ~N ciclos y termina
+          sleep $(( (github.event.inputs.cycles || 3) * 12 ))
+          kill $PID || true

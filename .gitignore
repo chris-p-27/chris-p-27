@@ -1,0 +1,16 @@
+# Python venv y artefactos
+.venv/
+__pycache__/
+*.pyc
+
+# Entornos
+.env
+.env.*
+
+# Editor
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

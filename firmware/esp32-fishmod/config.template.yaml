@@ -1,0 +1,129 @@
+# ESPHome template (NO incluye pines aún). Para usar cuando llegue el ESP32.
+# Filosofía: publicar JSON a Ubidots v2.0 y ejecutar automatizaciones locales (ATO/umbrales).
+
+substitutions:
+  device_label: aquarium_iteration_01
+  fw_version: esp32-fishmod-0.1.0
+  pub_period_sec: "60"
+
+# --- Wi-Fi (rellenar) ---
+wifi:
+  ssid: "<YOUR_WIFI_SSID>"
+  password: "<YOUR_WIFI_PASSWORD>"
+
+# --- MQTT Ubidots (TLS 8883) ---
+mqtt:
+  broker: industrial.api.ubidots.com
+  port: 8883
+  username: !secret ubidots_token   # crea ubidots_token en secrets.yaml
+  password: ""                      # Ubidots usa token como user; password vacío
+  ssl_fingerprints: []              # recomendado usar CA; ver 'certificate'
+  # certificate: |-
+  #   -----BEGIN CERTIFICATE-----
+  #   (Opcional: pega CA si tu librería lo requiere)
+  #   -----END CERTIFICATE-----
+  discovery: false
+  on_message:
+    # TODO: Ajusta el tópico de suscripción según doc de Ubidots para control por MQTT.
+    - topic: "/v2.0/devices/${device_label}/ato_mode_cmd"
+      then:
+        - lambda: |-
+            // Parsear payload y ajustar modo local de ATO: auto|on|off
+            // Implementar con globals o text_sensor si lo prefieres.
+            ESP_LOGI("mqtt", "cmd_ato payload: %s", x.c_str());
+
+  birth_message:
+    topic: "/v2.0/devices/${device_label}"
+    payload: |-
+      {"availability":"online","fw_version":"${fw_version}"}
+    qos: 1
+    retain: true
+  will_message:
+    topic: "/v2.0/devices/${device_label}"
+    payload: |-
+      {"availability":"offline"}
+    qos: 1
+    retain: true
+  qos: 1
+  retain: false
+
+# --- Sensores (placeholders; añade pines cuando cablees) ---
+sensor:
+  - platform: template
+    name: "Water Temp C"
+    id: water_temp_c
+    unit_of_measurement: "°C"
+    accuracy_decimals: 1
+    update_interval: ${pub_period_sec}s
+    lambda: |-
+      // TODO: reemplazar por lectura real (DS18B20). Este valor simula.
+      return 25.0;
+
+  - platform: template
+    name: "Water pH"
+    id: water_ph
+    accuracy_decimals: 2
+    update_interval: ${pub_period_sec}s
+    lambda: |-
+      // TODO: reemplazar por lectura real (DFRobot/ADC). Este valor simula.
+      return 7.20;
+
+binary_sensor:
+  - platform: template
+    name: "Water Level Low SW"
+    id: water_level_low_sw
+    lambda: |-
+      // TODO: reemplazar por GPIO real; 1 = bajo
+      return false;
+
+  - platform: template
+    name: "Water Level High SW"
+    id: water_level_high_sw
+    lambda: |-
+      // TODO: reemplazar por GPIO real; 1 = alto
+      return true;
+
+text_sensor:
+  - platform: template
+    name: "ATO Status"
+    id: ato_status
+    update_interval: ${pub_period_sec}s
+    lambda: |-
+      // Estados: idle|filling|lockout
+      return {"idle"};
+
+  - platform: wifi_info
+    ip_address:
+      name: "Node IP"
+
+# --- Publicación JSON periódica a Ubidots v2.0 ---
+interval:
+  - interval: ${pub_period_sec}s
+    then:
+      - lambda: |-
+          // Derivada de estado de nivel
+          std::string level_status = "ok";
+          if (id(water_level_low_sw).state) level_status = "low";
+          if (id(water_level_high_sw).state) level_status = "high";
+
+          // Construir JSON compacto
+          char payload[512];
+          snprintf(payload, sizeof(payload),
+            "{\"water_temp_c\":%.2f,\"water_ph\":%.2f,"
+            "\"water_level_status\":\"%s\",\"water_level_low_sw\":%d,\"water_level_high_sw\":%d,"
+            "\"ato_status\":\"%s\",\"wifi_rssi_dbm\":%d,"
+            "\"fw_version\":\"%s\"}",
+            id(water_temp_c).state, id(water_ph).state,
+            level_status.c_str(),
+            id(water_level_low_sw).state ? 1 : 0,
+            id(water_level_high_sw).state ? 1 : 0,
+            id(ato_status).state.c_str(),
+            WiFi.RSSI(),
+            "${fw_version}"
+          );
+
+          // Publicar al topic v2.0 de Ubidots
+          id(mqtt_client)->publish(("/v2.0/devices/" + std::string("${device_label}")).c_str(), payload);
+
+# --- TODO automatizaciones locales (ATO/umbrales) ---
+# Implementar cuando tengas pines: timeout, cooldown, lockout; alarma pH sostenida; failsafe sin MQTT.
