@@ -1,0 +1,12 @@
+{
+  "water_temp_c": 25.1,
+  "water_ph": 7.22,
+  "water_level_status": "ok",
+  "water_level_low_sw": 0,
+  "water_level_high_sw": 1,
+  "ato_status": "idle",
+  "wifi_rssi_dbm": -60,
+  "fw_version": "esp32-fishmod-0.1.0",
+  "device_uptime_s": 12345,
+  "timestamp": 1731379200000
+}
